@@ -1,7 +1,6 @@
 # Electron
 dist/
 out/
-build/
 
 # Node
 node_modules/
