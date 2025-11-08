@@ -20,7 +20,7 @@ const AnimationManager = {
     idleTimer: null,
     
     states: {
-        IDLE: 'robot-loading',
+        IDLE: 'robot-loving',
         GREETING: 'robot-hi',
         THINKING: 'robot-thinking',
         PROCESSING: 'robot-processing',
