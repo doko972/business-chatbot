@@ -10,6 +10,179 @@ let isMinimized = true;
 let isFullscreen = false;
 
 // ============================================
+// 🆕 GESTIONNAIRE D'ANIMATIONS CENTRALISÉ
+// ============================================
+
+const AnimationManager = {
+    current: null,
+    currentHeader: null, // 🆕 Animation du header
+    currentState: 'idle',
+    idleTimer: null,
+    
+    states: {
+        IDLE: 'robot-loading',
+        GREETING: 'robot-hi',
+        THINKING: 'robot-thinking',
+        PROCESSING: 'robot-processing',
+        CHATTING: 'robot-chatting',
+        HAPPY: 'robot-happy',
+        CONFUSED: 'robot-confused',
+        ERROR: 'robot-error',
+        IDEA: 'robot-idea',
+        LOVING: 'robot-loving',
+        LOADING: 'robot-loading'
+    },
+    
+    // Détection de sentiment dans les réponses
+    detectSentiment(text) {
+        const lowerText = text.toLowerCase();
+        
+        // Mots-clés pour chaque émotion (ordre d'importance)
+        const patterns = {
+            error: ['erreur', 'impossible', 'échec', 'problème', 'désolé', 'malheureusement'],
+            confused: ['pourriez-vous préciser', 'je ne comprends pas', 'pouvez-vous clarifier', 'ambig'],
+            loving: ['merci', 'avec plaisir', 'ravi', 'content de', 'heureux de'],
+            happy: ['excellent', 'parfait', 'super', 'bravo', 'réussi', 'génial', 'formidable'],
+            idea: ['voici', 'proposition', 'suggestion', 'solution', 'je propose', 'recommandation']
+        };
+        
+        // Vérifier dans l'ordre de priorité
+        for (const [emotion, keywords] of Object.entries(patterns)) {
+            if (keywords.some(keyword => lowerText.includes(keyword))) {
+                return emotion;
+            }
+        }
+        
+        return 'chatting'; // Par défaut
+    },
+    
+    // Changer l'animation avec transition fluide (🆕 synchronisé bouton + header)
+    changeAnimation(state, duration = null) {
+        const animationFile = this.states[state.toUpperCase()] || state;
+        const animationPath = `./animations/${animationFile}.json`;
+        
+        console.log(`🎭 Animation synchronisée: ${state} (${animationFile})`);
+        
+        const container = document.getElementById('lottie-container');
+        const headerContainer = document.getElementById('lottie-header');
+        
+        // 🆕 Phase 1 : Fade out des DEUX animations
+        if (container) container.classList.add('fading-out');
+        if (headerContainer) headerContainer.classList.add('fading-out');
+        
+        setTimeout(() => {
+            // Phase 2 : Détruire les anciennes animations
+            if (this.current) {
+                this.current.destroy();
+            }
+            if (this.currentHeader) {
+                this.currentHeader.destroy();
+            }
+            
+            try {
+                // Phase 3 : Charger les nouvelles animations (SYNCHRONISÉES)
+                
+                // Animation du bouton flottant
+                if (container) {
+                    this.current = window.lottie.loadAnimation({
+                        container: container,
+                        renderer: 'svg',
+                        loop: true,
+                        autoplay: true,
+                        path: animationPath
+                    });
+                }
+                
+                // 🆕 Animation du header (même animation)
+                if (headerContainer) {
+                    this.currentHeader = window.lottie.loadAnimation({
+                        container: headerContainer,
+                        renderer: 'svg',
+                        loop: true,
+                        autoplay: true,
+                        path: animationPath
+                    });
+                }
+                
+                this.currentState = state;
+                
+                // Phase 4 : Fade in des DEUX animations
+                if (container) {
+                    container.classList.remove('fading-out');
+                    container.classList.add('fading-in');
+                }
+                if (headerContainer) {
+                    headerContainer.classList.remove('fading-out');
+                    headerContainer.classList.add('fading-in');
+                }
+                
+                setTimeout(() => {
+                    if (container) container.classList.remove('fading-in');
+                    if (headerContainer) headerContainer.classList.remove('fading-in');
+                }, 200);
+                
+                // Si durée spécifiée, revenir à idle après
+                if (duration) {
+                    setTimeout(() => {
+                        this.toIdle();
+                    }, duration);
+                }
+                
+                // Reset le timer idle
+                this.resetIdleTimer();
+                
+            } catch (error) {
+                console.error('❌ Erreur chargement animation:', error);
+                if (container) container.classList.remove('fading-out');
+                if (headerContainer) headerContainer.classList.remove('fading-out');
+            }
+        }, 200); // Durée du fade out
+    },
+    
+    // Passer en mode idle
+    toIdle() {
+        if (this.currentState !== 'idle') {
+            this.changeAnimation('idle');
+        }
+    },
+    
+    // Reset le timer idle (30 secondes)
+    resetIdleTimer() {
+        if (this.idleTimer) {
+            clearTimeout(this.idleTimer);
+        }
+        
+        this.idleTimer = setTimeout(() => {
+            this.toIdle();
+        }, 30000); // 30 secondes
+    },
+    
+    // Animation de salutation
+    greet() {
+        this.changeAnimation('greeting', 2000);
+    },
+    
+    // Animation de réflexion
+    think() {
+        this.changeAnimation('thinking');
+    },
+    
+    // Animation de traitement
+    process() {
+        this.changeAnimation('processing');
+    },
+    
+    // Animation basée sur le sentiment
+    respondWith(text) {
+        const sentiment = this.detectSentiment(text);
+        this.changeAnimation(sentiment);
+    }
+};
+
+// Exposer pour debug
+window.AnimationManager = AnimationManager;
+
+// ============================================
 // 🆕 AUTHENTIFICATION SIMPLIFIÉE
 // ============================================
 
@@ -61,6 +234,9 @@ async function login(email, password) {
             localStorage.setItem('current_user', JSON.stringify(currentUser));
 
             showAuthStatus('success', `✅ Bienvenue ${data.user.name} !`);
+            
+            // 🆕 Animation de bienvenue
+            AnimationManager.greet();
 
             setTimeout(() => {
                 showAccountSection();
@@ -68,11 +244,13 @@ async function login(email, password) {
 
         } else {
             showAuthStatus('error', '❌ Email ou mot de passe incorrect');
+            AnimationManager.changeAnimation('confused', 3000);
         }
 
     } catch (error) {
         console.error('Erreur login:', error);
         showAuthStatus('error', '❌ Erreur de connexion au serveur');
+        AnimationManager.changeAnimation('error', 3000);
     } finally {
         loginBtn.disabled = false;
         loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Se connecter';
@@ -100,6 +278,9 @@ async function logout() {
 
     showAuthSection();
     showAuthStatus('success', '👋 À bientôt !');
+    
+    // 🆕 Animation d'au revoir
+    AnimationManager.greet();
 }
 
 // Afficher le statut d'authentification
@@ -154,7 +335,7 @@ function checkAuth() {
 let conversationHistory = [];
 
 // ============================================
-// GESTION ANIMATION LOTTIE
+// GESTION ANIMATION LOTTIE (INITIALISÉE)
 // ============================================
 
 let assistantAnimation = null;
@@ -173,23 +354,10 @@ function initLottieAnimation() {
             return;
         }
 
-        assistantAnimation = window.lottie.loadAnimation({
-            container: container,
-            renderer: 'svg',
-            loop: true,
-            autoplay: true,
-            path: './animations/assistant-waiting.json'
-        });
+        // 🆕 Utiliser AnimationManager pour la première animation
+        AnimationManager.changeAnimation('greeting', 2000);
 
-        console.log('✅ Animation assistant chargée');
-
-        assistantAnimation.addEventListener('DOMLoaded', () => {
-            console.log('💼 Assistant prêt et animé !');
-        });
-
-        assistantAnimation.addEventListener('data_failed', () => {
-            console.error('❌ Impossible de charger le fichier JSON');
-        });
+        console.log('✅ Animation assistant chargée via AnimationManager');
 
     } catch (error) {
         console.error('Erreur:', error);
@@ -197,16 +365,19 @@ function initLottieAnimation() {
 }
 
 window.assistantLottie = {
-    animation: () => assistantAnimation,
-    play: () => assistantAnimation?.play(),
-    pause: () => assistantAnimation?.pause(),
-    stop: () => assistantAnimation?.stop(),
-    getStatus: () => !assistantAnimation ? 'not loaded' : (assistantAnimation.isPaused ? 'paused' : 'playing')
+    animation: () => AnimationManager.current,
+    play: () => AnimationManager.current?.play(),
+    pause: () => AnimationManager.current?.pause(),
+    stop: () => AnimationManager.current?.stop(),
+    getStatus: () => !AnimationManager.current ? 'not loaded' : (AnimationManager.current.isPaused ? 'paused' : 'playing')
 };
 
 // ============================================
 // GESTION ANIMATION LOTTIE HEADER
 // ============================================
+
+// 🆕 Le header est maintenant géré par AnimationManager
+// Cette fonction vérifie juste que le container existe
 
 let assistantHeaderAnimation = null;
 
@@ -218,36 +389,19 @@ function initLottieHeader() {
         return;
     }
 
-    try {
-        if (typeof window.lottie === 'undefined') {
-            console.error('❌ lottie-web n\'est pas chargé');
-            return;
-        }
-
-        assistantHeaderAnimation = window.lottie.loadAnimation({
-            container: container,
-            renderer: 'svg',
-            loop: true,
-            autoplay: true,
-            path: './animations/assistant-waiting.json'
-        });
-
-        console.log('✅ Animation assistant header chargée');
-
-        assistantHeaderAnimation.addEventListener('DOMLoaded', () => {
-            console.log('💼 Assistant du header prêt !');
-        });
-
-    } catch (error) {
-        console.error('❌ Erreur chargement animation header:', error);
+    if (typeof window.lottie === 'undefined') {
+        console.error('❌ lottie-web n\'est pas chargé');
+        return;
     }
+
+    console.log('✅ Container header prêt - animation gérée par AnimationManager');
 }
 
 window.assistantLottieHeader = {
-    animation: () => assistantHeaderAnimation,
-    play: () => assistantHeaderAnimation?.play(),
-    pause: () => assistantHeaderAnimation?.pause(),
-    getStatus: () => assistantHeaderAnimation ? 'loaded' : 'not loaded'
+    animation: () => AnimationManager.currentHeader,
+    play: () => AnimationManager.currentHeader?.play(),
+    pause: () => AnimationManager.currentHeader?.pause(),
+    getStatus: () => AnimationManager.currentHeader ? 'loaded' : 'not loaded'
 };
 
 // Éléments DOM
@@ -279,7 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
     loadHistory();
     setupEventListeners();
-    checkAuth(); // 🆕 Vérifier l'authentification
+    checkAuth();
     setupFullscreenToggle();
     setupKeyboardShortcuts();
 
@@ -288,7 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
         initLottieHeader();
     }, 100);
 
-    console.log('✅ Application initialisée');
+    console.log('✅ Application initialisée avec AnimationManager');
 });
 
 // ============================================
@@ -371,6 +525,8 @@ function loadSettings() {
 function setupEventListeners() {
     if (elements.floatingButton) {
         elements.floatingButton.addEventListener('click', () => {
+            // 🆕 Animation de salutation à l'ouverture
+            AnimationManager.greet();
             toggleChat(false);
         });
     }
@@ -422,9 +578,23 @@ function setupEventListeners() {
                 sendMessage();
             }
         });
+        
+        // 🆕 Animation quand l'utilisateur tape
         elements.messageInput.addEventListener('input', () => {
             elements.messageInput.style.height = 'auto';
             elements.messageInput.style.height = Math.min(elements.messageInput.scrollHeight, 120) + 'px';
+            
+            // Passer en mode "thinking" si l'utilisateur tape
+            if (elements.messageInput.value.length > 3 && AnimationManager.currentState === 'idle') {
+                AnimationManager.think();
+            }
+        });
+        
+        // 🆕 Retour idle si le champ est vidé
+        elements.messageInput.addEventListener('blur', () => {
+            if (!elements.messageInput.value.trim()) {
+                AnimationManager.toIdle();
+            }
         });
     }
 
@@ -466,6 +636,9 @@ function setupEventListeners() {
                             </div>
                         `;
                         elements.messagesContainer.appendChild(welcomeDiv);
+                        
+                        // 🆕 Animation de nouvelle conversation
+                        AnimationManager.greet();
                     }, 200);
 
                     setTimeout(() => {
@@ -547,6 +720,9 @@ function toggleChat(minimize = false) {
         elements.floatingButton.style.top = 'auto';
         elements.floatingButton.style.right = '20px';
         elements.floatingButton.style.bottom = '20px';
+        
+        // 🆕 Retour en mode idle quand minimisé
+        AnimationManager.toIdle();
     } else {
         elements.floatingButton.style.display = 'none';
         elements.chatContainer.classList.remove('hidden');
@@ -579,7 +755,7 @@ async function testConnection() {
     elements.testConnectionBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Test...';
 
     try {
-        const response = await fetch(`${API_BASE_URL}/business/test`, {
+        const response = await fetch(`${API_BASE_URL}/chatbot/test`, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json',
@@ -589,12 +765,16 @@ async function testConnection() {
 
         if (response.ok) {
             showConnectionStatus('✅ Connexion réussie !', 'success');
+            // 🆕 Animation de succès
+            AnimationManager.changeAnimation('happy', 2000);
         } else {
             throw new Error('Erreur de connexion');
         }
     } catch (error) {
         console.error('Erreur de connexion:', error);
         showConnectionStatus('❌ Échec de la connexion. Vérifiez l\'URL.', 'error');
+        // 🆕 Animation d'erreur
+        AnimationManager.changeAnimation('error', 3000);
     } finally {
         elements.testConnectionBtn.disabled = false;
         elements.testConnectionBtn.innerHTML = '<i class="fas fa-plug"></i> Tester';
@@ -604,7 +784,7 @@ async function testConnection() {
 async function checkInitialConnection() {
     if (config.apiUrl) {
         try {
-            const response = await fetch(`${API_BASE_URL}/business/test`);
+            const response = await fetch(`${API_BASE_URL}/chatbot/test`);
             if (!response.ok) {
                 elements.settingsPanel.classList.add('active');
             }
@@ -622,7 +802,7 @@ function showConnectionStatus(message, type) {
 }
 
 // ============================================
-// 🆕 ENVOI DE MESSAGE AVEC AUTHENTIFICATION
+// 🆕 ENVOI DE MESSAGE AVEC AUTHENTIFICATION ET ANIMATIONS
 // ============================================
 
 async function sendMessage() {
@@ -633,6 +813,8 @@ async function sendMessage() {
 
     if (message.length < 2) {
         addMessage("💼 Pourriez-vous préciser votre demande ?", 'bot');
+        // 🆕 Animation de confusion
+        AnimationManager.changeAnimation('confused', 3000);
         return;
     }
 
@@ -651,6 +833,9 @@ async function sendMessage() {
     elements.sendButton.disabled = true;
     elements.messageInput.disabled = true;
     showTypingIndicator(true);
+    
+    // 🆕 Animation de traitement
+    AnimationManager.process();
 
     try {
         // Préparer les headers
@@ -671,7 +856,7 @@ async function sendMessage() {
         const useContext = document.getElementById('useContextToggle')?.checked ?? true;
 
         // Appel API
-        const response = await fetch(`${API_BASE_URL}/business/message`, {
+        const response = await fetch(`${API_BASE_URL}/chatbot/message`, {
             method: 'POST',
             headers: headers,
             body: JSON.stringify({
@@ -695,14 +880,21 @@ async function sendMessage() {
 
             if (response.status === 422) {
                 friendlyMessage = "💼 Pourriez-vous reformuler votre demande de manière plus détaillée ?";
+                // 🆕 Animation de confusion
+                AnimationManager.changeAnimation('confused', 4000);
             } else if (response.status === 500) {
                 friendlyMessage = "💼 Une erreur technique est survenue. Veuillez réessayer dans quelques instants.";
+                // 🆕 Animation d'erreur
+                AnimationManager.changeAnimation('error', 4000);
             } else if (response.status === 404) {
                 friendlyMessage = "💼 Service temporairement indisponible. Veuillez contacter le support.";
+                AnimationManager.changeAnimation('error', 4000);
             } else if (response.status === 401 || response.status === 403) {
                 friendlyMessage = "💼 Votre session a expiré. Veuillez vous reconnecter.";
+                AnimationManager.changeAnimation('confused', 4000);
             } else {
                 friendlyMessage = "💼 Une erreur est survenue. Veuillez réessayer.";
+                AnimationManager.changeAnimation('error', 4000);
             }
 
             showTypingIndicator(false);
@@ -727,6 +919,9 @@ async function sendMessage() {
 
         // Afficher la réponse
         addMessage(botResponse, 'bot');
+        
+        // 🆕 Animation basée sur le sentiment de la réponse
+        AnimationManager.respondWith(botResponse);
 
         // Logs de debug
         if (data.context_used) {
@@ -759,6 +954,9 @@ async function sendMessage() {
         console.error('Erreur:', error);
         let friendlyMessage = "💼 Impossible de se connecter au serveur. Vérifiez votre connexion internet.";
         addMessage(friendlyMessage, 'bot');
+        
+        // 🆕 Animation d'erreur réseau
+        AnimationManager.changeAnimation('error', 4000);
 
     } finally {
         // Réactiver les contrôles
@@ -982,6 +1180,8 @@ function setupKeyboardShortcuts() {
                 setTimeout(() => {
                     addMessage('💼 Nouvelle conversation démarrée. Comment puis-je vous aider ?', 'bot');
                     showToast('🔄 Nouvelle conversation', 'success');
+                    // 🆕 Animation de nouvelle conversation
+                    AnimationManager.greet();
                 }, 100);
 
                 setTimeout(() => {
@@ -1165,10 +1365,12 @@ window.assistantAuth = {
     logout: logout
 };
 
-console.log('💼 Assistant Pro chargé avec authentification !');
-console.log('🤖 Animation Lottie intégrée');
+console.log('💼 Assistant Pro chargé avec AnimationManager !');
+console.log('🎭 Animations contextuelles activées');
+console.log('🤖 Animations synchronisées (bouton + header)');
+console.log('📐 Robot header agrandi: 100x100px');
 console.log('💾 Capacité: 150 échanges (300 messages)');
 console.log('💡 Debug: window.assistantDebug.showHistory()');
 console.log('💡 Auth: window.assistantAuth.isAuthenticated()');
 console.log('💡 Fullscreen: window.assistantFullscreen.toggle()');
-console.log('💡 Lottie: window.assistantLottie.getStatus()');
+console.log('💡 Animations: window.AnimationManager');
