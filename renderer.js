@@ -3,7 +3,7 @@
 // ============================================
 
 let config = {
-    apiUrl: localStorage.getItem('apiUrl') || 'http://127.0.0.1:8000/api/business/message'
+    apiUrl: localStorage.getItem('apiUrl') || 'http://127.0.0.1:8000/api/chatbot/message'
 };
 
 let isMinimized = true;
@@ -15,12 +15,12 @@ let isFullscreen = false;
 
 const AnimationManager = {
     current: null,
-    currentHeader: null, // 🆕 Animation du header
+    currentHeader: null,
     currentState: 'idle',
     idleTimer: null,
     
     states: {
-        IDLE: 'robot-loading',
+        IDLE: 'robot-chatting',
         GREETING: 'robot-hi',
         THINKING: 'robot-thinking',
         PROCESSING: 'robot-processing',
@@ -189,7 +189,7 @@ window.AnimationManager = AnimationManager;
 let authToken = localStorage.getItem('auth_token');
 let currentUser = null;
 
-const API_BASE_URL = 'http://127.0.0.1:8000/api';
+const API_BASE_URL = 'http://127.0.0.1:8000';
 
 // Générer ou récupérer un ID unique pour cet appareil
 function getDeviceId() {
@@ -441,6 +441,13 @@ document.addEventListener('DOMContentLoaded', () => {
         initLottieAnimation();
         initLottieHeader();
     }, 100);
+    
+    // 🆕 Initialiser le mode vocal
+    setTimeout(() => {
+        if (window.VoiceManager) {
+            VoiceManager.init();
+        }
+    }, 200);
 
     console.log('✅ Application initialisée avec AnimationManager');
 });
@@ -631,8 +638,8 @@ function setupEventListeners() {
                                 <i class="fas fa-robot"></i>
                             </div>
                             <div class="message-content">
-                                <div class="message-header">Assistant Pro 💼</div>
-                                <p>💼 Nouvelle conversation démarrée. Comment puis-je vous aider ?</p>
+                                <div class="message-header">Assistant Pro</div>
+                                <p>Nouvelle conversation démarrée. Comment puis-je vous aider ?</p>
                             </div>
                         `;
                         elements.messagesContainer.appendChild(welcomeDiv);
@@ -812,7 +819,7 @@ async function sendMessage() {
     if (!message) return;
 
     if (message.length < 2) {
-        addMessage("💼 Pourriez-vous préciser votre demande ?", 'bot');
+        addMessage("Pourriez-vous préciser votre demande ?", 'bot');
         // 🆕 Animation de confusion
         AnimationManager.changeAnimation('confused', 3000);
         return;
@@ -879,21 +886,21 @@ async function sendMessage() {
             let friendlyMessage = '';
 
             if (response.status === 422) {
-                friendlyMessage = "💼 Pourriez-vous reformuler votre demande de manière plus détaillée ?";
+                friendlyMessage = "Pourriez-vous reformuler votre demande de manière plus détaillée ?";
                 // 🆕 Animation de confusion
                 AnimationManager.changeAnimation('confused', 4000);
             } else if (response.status === 500) {
-                friendlyMessage = "💼 Une erreur technique est survenue. Veuillez réessayer dans quelques instants.";
+                friendlyMessage = "Une erreur technique est survenue. Veuillez réessayer dans quelques instants.";
                 // 🆕 Animation d'erreur
                 AnimationManager.changeAnimation('error', 4000);
             } else if (response.status === 404) {
-                friendlyMessage = "💼 Service temporairement indisponible. Veuillez contacter le support.";
+                friendlyMessage = "Service temporairement indisponible. Veuillez contacter le support.";
                 AnimationManager.changeAnimation('error', 4000);
             } else if (response.status === 401 || response.status === 403) {
-                friendlyMessage = "💼 Votre session a expiré. Veuillez vous reconnecter.";
+                friendlyMessage = "Votre session a expiré. Veuillez vous reconnecter.";
                 AnimationManager.changeAnimation('confused', 4000);
             } else {
-                friendlyMessage = "💼 Une erreur est survenue. Veuillez réessayer.";
+                friendlyMessage = "Une erreur est survenue. Veuillez réessayer.";
                 AnimationManager.changeAnimation('error', 4000);
             }
 
@@ -952,7 +959,7 @@ async function sendMessage() {
 
     } catch (error) {
         console.error('Erreur:', error);
-        let friendlyMessage = "💼 Impossible de se connecter au serveur. Vérifiez votre connexion internet.";
+        let friendlyMessage = "Impossible de se connecter au serveur. Vérifiez votre connexion internet.";
         addMessage(friendlyMessage, 'bot');
         
         // 🆕 Animation d'erreur réseau
@@ -967,14 +974,55 @@ async function sendMessage() {
     }
 }
 
+// ============================================
+// 🆕 HELPER : Créer un avatar Lottie pour les messages
+// ============================================
+
+function createMessageAvatarLottie(animationState = null) {
+    const avatarDiv = document.createElement('div');
+    avatarDiv.className = 'message-avatar';
+    
+    const lottieContainer = document.createElement('div');
+    lottieContainer.className = 'message-avatar-lottie';
+    
+    const messageId = 'msg-avatar-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    lottieContainer.id = messageId;
+    
+    avatarDiv.appendChild(lottieContainer);
+    
+    // Utiliser l'état actuel ou celui spécifié
+    const stateToUse = animationState || AnimationManager.currentState || 'idle';
+    const animationFile = AnimationManager.states[stateToUse.toUpperCase()] || 'assistant-waiting';
+    
+    setTimeout(() => {
+        const container = document.getElementById(messageId);
+        if (!container) return;
+        
+        try {
+            window.lottie.loadAnimation({
+                container: container,
+                renderer: 'svg',
+                loop: true,
+                autoplay: true,
+                path: `./animations/${animationFile}.json`
+            });
+        } catch (error) {
+            console.error('❌ Erreur chargement mini avatar:', error);
+            // Fallback : afficher l'icône Font Awesome
+            container.innerHTML = '<i class="fas fa-robot" style="display: block !important;"></i>';
+        }
+    }, 50);
+    
+    return avatarDiv;
+}
+
 function addMessage(text, type) {
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${type}-message`;
 
     if (type === 'bot') {
-        const avatarDiv = document.createElement('div');
-        avatarDiv.className = 'message-avatar';
-        avatarDiv.innerHTML = '<i class="fas fa-robot"></i>';
+        // 🆕 Utiliser le helper pour créer l'avatar Lottie
+        const avatarDiv = createMessageAvatarLottie();
         messageDiv.appendChild(avatarDiv);
     }
 
@@ -984,7 +1032,7 @@ function addMessage(text, type) {
     if (type === 'bot') {
         const header = document.createElement('div');
         header.className = 'message-header';
-        header.textContent = 'Assistant Pro 💼';
+        header.textContent = 'Assistant Pro';
         contentDiv.appendChild(header);
     }
 
@@ -1053,17 +1101,21 @@ function loadHistory() {
 function restoreMessagesUI() {
     elements.messagesContainer.innerHTML = '';
 
+    // 🆕 Message de bienvenue avec avatar Lottie
     const welcomeBack = document.createElement('div');
     welcomeBack.className = 'message bot-message welcome-message';
-    welcomeBack.innerHTML = `
-        <div class="message-avatar">
-            <i class="fas fa-robot"></i>
-        </div>
-        <div class="message-content">
-            <div class="message-header">Assistant Pro 💼</div>
-            <p>Bon retour ! Je me souviens de notre conversation précédente. Souhaitez-vous continuer ? 💼</p>
-        </div>
+    
+    const avatarDiv = createMessageAvatarLottie('greeting');
+    welcomeBack.appendChild(avatarDiv);
+    
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    contentDiv.innerHTML = `
+        <div class="message-header">Assistant Pro</div>
+        <p>Bon retour ! Je me souviens de notre conversation précédente. Souhaitez-vous continuer ?</p>
     `;
+    welcomeBack.appendChild(contentDiv);
+    
     elements.messagesContainer.appendChild(welcomeBack);
 
     const recentMessages = conversationHistory.slice(-20);
@@ -1178,8 +1230,8 @@ function setupKeyboardShortcuts() {
                 }, 100);
 
                 setTimeout(() => {
-                    addMessage('💼 Nouvelle conversation démarrée. Comment puis-je vous aider ?', 'bot');
-                    showToast('🔄 Nouvelle conversation', 'success');
+                    addMessage('Nouvelle conversation démarrée. Comment puis-je vous aider ?', 'bot');
+                    showToast('Nouvelle conversation', 'success');
                     // 🆕 Animation de nouvelle conversation
                     AnimationManager.greet();
                 }, 100);
@@ -1356,7 +1408,7 @@ window.assistantShortcuts = {
     toggleHelp: toggleHelpPanel
 };
 
-// 🆕 Exposer pour debug
+// 🆕 Exposer pour debug et VoiceManager
 window.assistantAuth = {
     getToken: () => authToken,
     getUser: () => currentUser,
@@ -1364,6 +1416,9 @@ window.assistantAuth = {
     login: login,
     logout: logout
 };
+
+// 🆕 Exposer sendMessage pour VoiceManager
+window.sendMessage = sendMessage;
 
 console.log('💼 Assistant Pro chargé avec AnimationManager !');
 console.log('🎭 Animations contextuelles activées');
